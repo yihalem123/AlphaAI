@@ -1,0 +1,21 @@
+# Stripe Configuration for AI Trading Platform
+
+# Test/Sandbox Keys (for development)
+STRIPE_PUBLISHABLE_KEY=pk_test_51234567890abcdef...
+STRIPE_SECRET_KEY=sk_test_51234567890abcdef...
+
+# Production Keys (when ready for live payments)
+# STRIPE_PUBLISHABLE_KEY=pk_live_51234567890abcdef...
+# STRIPE_SECRET_KEY=sk_live_51234567890abcdef...
+
+# Instructions:
+# 1. Get your Stripe test keys from: https://dashboard.stripe.com/test/apikeys
+# 2. Copy this file to .env or config.local
+# 3. Replace the values with your actual Stripe keys
+# 4. For testing, use Stripe test cards: https://stripe.com/docs/testing
+
+# Test Card Numbers for Stripe Testing:
+# - 4242424242424242 (Visa - Success)
+# - 4000000000000002 (Card declined)
+# - 4000000000009995 (Insufficient funds)
+# - 4000002760003184 (3D Secure authentication required)
