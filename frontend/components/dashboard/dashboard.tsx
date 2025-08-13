@@ -9,7 +9,7 @@ import { SignalsView } from './signals-view'
 import { MarketOverview } from './market-overview'
 import { SubscriptionCard } from './subscription-card'
 import { TradingViewChart, ChartSymbolSelector } from './tradingview-chart'
-import { useAuth } from '@/hooks/use-auth'
+import { useAuth, usePermissions } from '@/components/auth-provider-secure'
 import { SubscriptionUpgradeFlow } from '../subscription/subscription-upgrade-flow'
 
 // Custom SVG Icons
@@ -123,7 +123,35 @@ export function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, logout, isLoading } = useAuth()
+  const { hasPermission, canAccess } = usePermissions()
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 30%, #16213e 70%, #0f0f23 100%)',
+        color: '#ffffff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(102, 126, 234, 0.3)',
+            borderTop: '3px solid #667eea',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1rem auto'
+          }}></div>
+          <p style={{ color: '#94a3b8', fontSize: '1rem' }}>Loading Dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!user) return null
 

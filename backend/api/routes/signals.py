@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from core.database import get_db, User, TradingSignal
 from core.ai_service import AITradingService
-from api.auth import get_current_user, check_user_limits
+from api.auth_secure import get_current_user, check_user_limits
 
 router = APIRouter()
 
@@ -35,6 +35,7 @@ class SignalUpdateRequest(BaseModel):
 ai_service = AITradingService()
 
 @router.get("/", response_model=List[SignalResponse])
+@router.get("", response_model=List[SignalResponse])  # Handle requests without trailing slash
 async def get_signals(
     limit: int = 50,
     symbol: Optional[str] = None,

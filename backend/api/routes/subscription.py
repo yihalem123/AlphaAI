@@ -8,7 +8,7 @@ import os
 import secrets
 
 from core.database import get_db, User, Subscription
-from api.auth import get_current_user
+from api.auth_secure import get_current_user
 
 # Import Stripe
 try:

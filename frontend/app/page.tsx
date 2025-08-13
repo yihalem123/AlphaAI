@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { Pricing } from '@/components/landing/pricing'
 import { Dashboard } from '@/components/dashboard/dashboard'
-import { authService } from '@/lib/auth-service-complete'
-import { useAuth } from '@/hooks/use-auth'
+import { authServiceSecure } from '@/lib/auth-service-secure'
+import { useAuth, useSecurityNotification } from '@/components/auth-provider-secure'
 
 // Error Message Component
 function ErrorMessage({ message, onClose }: { message: string; onClose: () => void }) {
@@ -104,13 +104,13 @@ function PaymentModal({ plan, onClose, onSuccess }: {
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('stripe')
+  const { isAuthenticated } = useAuth()
 
   const handlePayment = async () => {
     setIsLoading(true)
     try {
       // Require authentication
-      const token = (authService.getToken && authService.getToken()) || localStorage.getItem('auth_token')
-      if (!token) {
+      if (!isAuthenticated) {
         alert('Authentication required. Please log in to continue.')
         setIsLoading(false)
         return
@@ -121,9 +121,9 @@ function PaymentModal({ plan, onClose, onSuccess }: {
       const response = await fetch(`${API_BASE_URL}/api/payment/create-checkout-session`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           plan_type: plan.id,
           billing_period: 'monthly',
@@ -747,12 +747,14 @@ function AuthForm({
 // Legacy PricingPage removed; using themed Pricing component
 
 export default function Home() {
-  // Use the AuthProvider context
+  // Use the secure AuthProvider context
   const { user, isLoading, login, register, logout, isAuthenticated } = useAuth()
+  const { event: securityEvent, dismiss: dismissSecurityEvent } = useSecurityNotification()
 
   const [showAuth, setShowAuth] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [showPayment, setShowPayment] = useState(false)
   const [selectedPaymentPlan, setSelectedPaymentPlan] = useState<any>(null)
 
@@ -760,23 +762,47 @@ export default function Home() {
   const handleAuth = async (email: string, password: string, name?: string) => {
     try {
       setError('')
+      setSuccess('')
       
       let result
       if (authMode === 'signup') {
         const username = name || email.split('@')[0]
         console.log(`🔐 Attempting registration for ${email}...`)
-        result = await register(email, password, username)
+        result = await register({
+          email,
+          password,
+          confirm_password: password,
+          username,
+          terms_accepted: true
+        })
       } else {
         console.log(`🔐 Attempting login for ${email}...`)
-        result = await login(email, password)
+        result = await login({
+          email,
+          password,
+          remember_me: true
+        })
       }
       
       if (result.success) {
         setShowAuth(false)
         setError('')
+        setSuccess(`${authMode === 'signup' ? 'Registration' : 'Login'} successful! Welcome to AI Trading Assistant.`)
         console.log(`🎉 ${authMode === 'signup' ? 'Registration' : 'Login'} successful!`)
       } else {
-        setError(result.error || 'Authentication failed. Please try again.')
+        if (result.requiresMfa) {
+          setError('Please enter your MFA code to continue.')
+        } else if (result.accountLocked) {
+          setError('Account temporarily locked due to too many failed attempts. Please try again later.')
+        } else if (result.rateLimited) {
+          setError('Too many attempts. Please wait before trying again.')
+        } else {
+          // Handle error properly - it might be an object or string
+          const errorMessage = typeof result.error === 'string' 
+            ? result.error 
+            : result.error?.message || result.error?.detail || 'Authentication failed. Please try again.'
+          setError(errorMessage)
+        }
       }
     } catch (error) {
       console.error('Authentication error:', error)
@@ -1481,6 +1507,68 @@ export default function Home() {
           onClose={() => setError('')} 
         />
       )}
+
+      {/* Success Message */}
+      {success && (
+        <SuccessMessage 
+          message={success} 
+          onClose={() => setSuccess('')} 
+        />
+      )}
+
+      {/* Security Event Notifications */}
+      {securityEvent && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          background: securityEvent.type === 'error' 
+            ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+            : securityEvent.type === 'warning'
+            ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+            : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+          color: '#ffffff',
+          padding: '1rem 1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+          zIndex: 3000,
+          maxWidth: '400px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          animation: 'slideInRight 0.3s ease-out'
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+              {securityEvent.type === 'error' ? '🚨 Security Alert' : 
+               securityEvent.type === 'warning' ? '⚠️ Warning' : 'ℹ️ Info'}
+            </div>
+            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>{securityEvent.message}</div>
+            {securityEvent.code && (
+              <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.25rem' }}>
+                Code: {securityEvent.code}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={dismissSecurityEvent}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#ffffff',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              padding: '0.25rem',
+              borderRadius: '4px',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            ×
+          </button>
+        </div>
+      )}
       
       {/* Navigation */}
       <nav style={{
@@ -1657,7 +1745,13 @@ export default function Home() {
       )}
 
       {/* Main Content */}
-      {isAuthenticated ? <Dashboard /> : <LandingPage />}
+      {isAuthenticated ? (
+        <div style={{ paddingTop: '80px' }}>
+          <Dashboard />
+        </div>
+      ) : (
+        <LandingPage />
+      )}
 
       <style jsx>{`
         @keyframes pulse {

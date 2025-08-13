@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
-import { AuthProvider } from '@/components/auth-provider'
+import { AuthProviderSecure } from '@/components/auth-provider-secure'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -37,12 +37,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
+          <AuthProviderSecure>
             <div className="relative min-h-screen bg-background">
               {children}
             </div>
             <Toaster />
-          </AuthProvider>
+          </AuthProviderSecure>
         </ThemeProvider>
       </body>
     </html>

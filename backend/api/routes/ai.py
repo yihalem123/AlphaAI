@@ -7,7 +7,8 @@ from datetime import datetime
 from core.database import get_db, User, ChatHistory
 from core.ai_service import AITradingService
 from core.market_data import MarketDataService
-from api.auth import get_current_user, check_user_limits
+from api.auth_secure import get_current_user, check_user_limits
+from core.rate_limiter import rate_limit_dependency
 
 router = APIRouter()
 
@@ -36,7 +37,8 @@ market_service = MarketDataService()
 async def chat_with_ai(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(lambda r: rate_limit_dependency(r, "api_ai"))
 ):
     """Chat with AI trading assistant"""
     try:

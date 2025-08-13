@@ -5,8 +5,8 @@ import { PlanSelectionModal } from './plan-selection-modal'
 import { PaymentMethodModal } from './payment-method-modal'
 // import { StripePayment } from './stripe-payment'
 import { CryptoPayment } from './crypto-payment'
-import { useAuth } from '@/hooks/use-auth'
-import { authService } from '@/lib/auth-service-complete'
+import { useAuth } from '@/components/auth-provider-secure'
+import { authServiceSecure } from '@/lib/auth-service-secure'
 
 interface Plan {
   id: string
@@ -46,16 +46,13 @@ export function SubscriptionUpgradeFlow({
     setPaymentData(data)
     if (!selectedPlan) return
     if (method === 'stripe') {
-      // Immediately create Checkout Session and redirect
+      // Immediately create Checkout Session and redirect (use secure service with cookies)
       try {
-        const token = (authService.getToken && authService.getToken()) || localStorage.getItem('auth_token')
-        if (!token) throw new Error('Authentication required')
-        const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/payment/create-checkout-session`, {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const resp = await fetch(`${API_BASE}/api/payment/create-checkout-session`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             plan_type: selectedPlan.id,
             billing_period: selectedPlan.billing_period || 'monthly',

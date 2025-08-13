@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import os
@@ -6,8 +6,12 @@ from datetime import datetime, timedelta
 import secrets
 import hashlib
 
-from api.auth import get_current_user
+from api.auth_secure import get_current_user, get_current_user_optional
+from core.auth_enhanced import enhanced_auth_service
 from api.routes.subscription import SUBSCRIPTION_PLANS
+from core.database import get_db, User
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 
 router = APIRouter()
 
@@ -30,12 +34,27 @@ class CreateCheckoutSessionRequest(BaseModel):
 
 class CheckoutSessionResponse(BaseModel):
     url: str
+def _get_or_create_stripe_customer_for_user(user: Any) -> Optional[str]:
+    """Find or create a Stripe customer for the given user by email."""
+    if not STRIPE_AVAILABLE:
+        return None
+    # Try to find existing customer by email
+    customers = stripe.Customer.list(email=user.email, limit=1)
+    if customers.data:
+        return customers.data[0].id
+    # Create new customer
+    created = stripe.Customer.create(email=user.email, name=user.username or user.email)
+    return created.id
+
 
 
 @router.post("/create-checkout-session", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
-    request: CreateCheckoutSessionRequest,
-    current_user = Depends(get_current_user)
+    payload: CreateCheckoutSessionRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_optional),
 ):
     if not STRIPE_AVAILABLE:
         raise HTTPException(
@@ -43,28 +62,51 @@ async def create_checkout_session(
             detail="Stripe not available"
         )
 
+    # Debug: log incoming cookies
+    try:
+        cookie_keys = list(request.cookies.keys())
+        print(f"[checkout] cookies present: {cookie_keys}")
+    except Exception:
+        pass
+
+    # Best-effort silent refresh for expired access token
+    if not current_user:
+        refresh_cookie = request.cookies.get("refresh_token")
+        if refresh_cookie:
+            try:
+                print("[checkout] attempting silent refresh via refresh_token cookie")
+                user, new_tokens = await enhanced_auth_service.refresh_user_tokens(db, refresh_cookie, request)
+                enhanced_auth_service.set_auth_cookies(response, new_tokens)
+                current_user = user
+            except Exception:
+                print("[checkout] silent refresh failed")
+
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
     # Validate plan
-    if request.plan_type not in SUBSCRIPTION_PLANS:
+    if payload.plan_type not in SUBSCRIPTION_PLANS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid plan type: {request.plan_type}"
+            detail=f"Invalid plan type: {payload.plan_type}"
         )
 
-    price_id = _get_stripe_price_id(request.plan_type, request.billing_period)
+    price_id = _get_stripe_price_id(payload.plan_type, payload.billing_period)
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Missing Stripe price configuration"
         )
 
-    success_url = request.success_url or os.getenv(
+    success_url = payload.success_url or os.getenv(
         "STRIPE_SUCCESS_URL", "http://localhost:3000/?checkout=success"
     )
-    cancel_url = request.cancel_url or os.getenv(
+    cancel_url = payload.cancel_url or os.getenv(
         "STRIPE_CANCEL_URL", "http://localhost:3000/?checkout=cancel"
     )
 
     try:
+        customer_id = _get_or_create_stripe_customer_for_user(current_user)
         session = stripe.checkout.Session.create(
             mode="subscription",
             line_items=[{"price": price_id, "quantity": 1}],
@@ -73,9 +115,10 @@ async def create_checkout_session(
             client_reference_id=str(current_user.id),
             metadata={
                 "user_id": str(current_user.id),
-                "plan_type": request.plan_type,
-                "billing_period": request.billing_period,
+                "plan_type": payload.plan_type,
+                "billing_period": payload.billing_period,
             },
+            customer=customer_id,
         )
         return CheckoutSessionResponse(url=session.url)
     except Exception as e:
@@ -399,3 +442,126 @@ async def get_payment_methods():
             }
         ]
     } 
+
+
+# ============ Stripe Billing Portal & Webhooks ============
+
+class BillingPortalRequest(BaseModel):
+    return_url: Optional[str] = None
+
+class BillingPortalResponse(BaseModel):
+    url: str
+
+@router.post("/create-billing-portal-session", response_model=BillingPortalResponse)
+async def create_billing_portal_session(
+    request: BillingPortalRequest,
+    current_user = Depends(get_current_user)
+):
+    if not STRIPE_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stripe not available")
+    try:
+        customer_id = _get_or_create_stripe_customer_for_user(current_user)
+        return_url = request.return_url or os.getenv("STRIPE_PORTAL_RETURN_URL", "http://localhost:3000/dashboard")
+        session = stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url)
+        return BillingPortalResponse(url=session.url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stripe portal error: {e}")
+
+
+@router.post("/webhooks/stripe")
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    if not STRIPE_AVAILABLE:
+        # Accept but do nothing
+        return {"received": True}
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    try:
+        if webhook_secret:
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        else:
+            # Unsafe fallback in dev
+            event = stripe.Event.construct_from(request.json(), stripe.api_key)  # type: ignore
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Webhook error: {e}")
+
+    event_type = event["type"]
+    data_obj = event["data"]["object"]
+
+    async def activate_user_subscription(user_id: int, plan_type: str, period_end_unix: Optional[int]):
+        # Compute expiry
+        expires = datetime.utcfromtimestamp(period_end_unix) if period_end_unix else (datetime.utcnow() + timedelta(days=30))
+        await db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                subscription_tier=plan_type,
+                subscription_expires=expires,
+                daily_limit=SUBSCRIPTION_PLANS.get(plan_type, SUBSCRIPTION_PLANS["pro"]).api_calls_limit
+            )
+        )
+        await db.commit()
+
+    try:
+        if event_type == "checkout.session.completed":
+            metadata = data_obj.get("metadata", {})
+            user_id = int(metadata.get("user_id") or data_obj.get("client_reference_id"))
+            plan_type = metadata.get("plan_type", "pro")
+            # Retrieve subscription to get period end
+            subscription_id = data_obj.get("subscription")
+            period_end = None
+            if subscription_id:
+                sub = stripe.Subscription.retrieve(subscription_id)
+                period_end = sub["current_period_end"]
+            await activate_user_subscription(user_id, plan_type, period_end)
+        elif event_type in ("customer.subscription.updated", "customer.subscription.created"):
+            # Best-effort: get user id from latest invoice/customer's email
+            subscription_id = data_obj.get("id")
+            customer_id = data_obj.get("customer")
+            period_end = data_obj.get("current_period_end")
+            # Try metadata via latest invoice
+            user_id = None
+            plan_type = "pro"
+            try:
+                if subscription_id:
+                    invoices = stripe.Invoice.list(subscription=subscription_id, limit=1)
+                    if invoices.data:
+                        inv = invoices.data[0]
+                        if inv.get("metadata") and inv["metadata"].get("user_id"):
+                            user_id = int(inv["metadata"]["user_id"])  # type: ignore
+                        if inv.get("metadata") and inv["metadata"].get("plan_type"):
+                            plan_type = inv["metadata"]["plan_type"]
+            except Exception:
+                pass
+            if not user_id and customer_id:
+                # Fallback by customer email
+                cust = stripe.Customer.retrieve(customer_id)
+                email = cust.get("email")
+                if email:
+                    result = await db.execute(select(User).where(User.email == email))
+                    user = result.scalar_one_or_none()
+                    if user:
+                        user_id = user.id
+            if user_id:
+                await activate_user_subscription(user_id, plan_type, period_end)
+        elif event_type == "customer.subscription.deleted":
+            # Downgrade on cancel
+            customer_id = data_obj.get("customer")
+            if customer_id:
+                cust = stripe.Customer.retrieve(customer_id)
+                email = cust.get("email")
+                if email:
+                    result = await db.execute(select(User).where(User.email == email))
+                    user = result.scalar_one_or_none()
+                    if user:
+                        await db.execute(
+                            update(User)
+                            .where(User.id == user.id)
+                            .values(subscription_tier="free")
+                        )
+                        await db.commit()
+    except Exception as e:
+        # Do not fail webhook delivery; log via HTTP exception
+        raise HTTPException(status_code=200, detail=f"Handled with warning: {e}")
+
+    return {"received": True}

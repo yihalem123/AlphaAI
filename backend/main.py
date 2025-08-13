@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
@@ -8,10 +8,12 @@ import os
 from dotenv import load_dotenv
 
 from api.routes import ai, portfolio, signals, subscription, payment
-from api import auth
+from api import auth_secure
 from core.database import init_db
+from core.security import SecurityHeaders
 from core.ai_service import AITradingService
 from core.market_data import MarketDataService
+from core.rate_limiter import rate_limiter
 
 load_dotenv()
 
@@ -24,6 +26,7 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
     await market_service.initialize()
+    await rate_limiter.initialize()
     yield
     # Shutdown
     await market_service.cleanup()
@@ -46,15 +49,29 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["X-CSRF-Token"]
 )
+
+# Add security middleware
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """Add security headers and monitoring"""
+    response = await call_next(request)
+    
+    # Add security headers
+    security_headers = SecurityHeaders.get_security_headers()
+    for key, value in security_headers.items():
+        response.headers[key] = value
+    
+    return response
 
 # Security
 security = HTTPBearer()
 
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+# Include routers with new secure authentication
+app.include_router(auth_secure.router, tags=["Authentication"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI Assistant"])
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["Portfolio"])
 app.include_router(signals.router, prefix="/api/signals", tags=["Trading Signals"])

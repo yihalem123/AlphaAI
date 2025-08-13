@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/hooks/use-auth'
-import { authService } from '@/lib/auth-service-complete'
+import { useAuth } from '@/components/auth-provider-secure'
+import { authServiceSecure } from '@/lib/auth-service-secure'
 
 interface Signal {
   id: number
@@ -90,7 +90,7 @@ export function SignalsView() {
       setError('')
       
       console.log('📡 Fetching trading signals...')
-      const response = await authService.getSignals()
+      const response = await authServiceSecure.getSignals()
       
       if (response.data) {
         console.log('✅ Signals data received:', response.data)

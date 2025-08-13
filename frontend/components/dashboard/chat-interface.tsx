@@ -8,9 +8,9 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Bot, User, TrendingUp, AlertCircle } from 'lucide-react'
-import { useAuth } from '@/hooks/use-auth'
+import { useAuth } from '@/components/auth-provider-secure'
 import { formatTimeAgo } from '@/lib/utils'
-import { authService } from '@/lib/auth-service-complete'
+import { authServiceSecure } from '@/lib/auth-service-secure'
 
 interface Message {
   id: string
@@ -62,7 +62,7 @@ export function ChatInterface() {
 
     try {
       console.log('💬 Sending chat message...')
-      const response = await authService.sendChatMessage(message)
+      const response = await authServiceSecure.sendChatMessage(message)
 
       if (response.data) {
         console.log('✅ AI response received:', response.data)
@@ -201,13 +201,12 @@ export function ChatInterface() {
           </form>
         </div>
 
-        {/* Usage Warning */}
-        {user && user.api_calls_count >= user.daily_limit * 0.8 && (
-          <div className="mx-6 mb-4 p-3 rounded-lg bg-bear/10 border border-bear/20 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-bear" />
-            <span className="text-sm text-bear">
-              You've used {user.api_calls_count}/{user.daily_limit} daily API calls. 
-              Consider upgrading for unlimited access.
+        {/* Usage Warning - TODO: Add usage tracking */}
+        {user && user.subscription_tier === 'free' && (
+          <div className="mx-6 mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-yellow-500" />
+            <span className="text-sm text-yellow-500">
+              You're on the free plan. Consider upgrading for unlimited access to AI features.
             </span>
           </div>
         )}

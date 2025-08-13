@@ -7,7 +7,7 @@ from datetime import datetime
 
 from core.database import get_db, User, Portfolio
 from core.market_data import MarketDataService
-from api.auth import get_current_user
+from api.auth_secure import get_current_user
 
 router = APIRouter()
 
@@ -32,6 +32,7 @@ class PortfolioResponse(BaseModel):
 market_service = MarketDataService()
 
 @router.get("/", response_model=PortfolioResponse)
+@router.get("", response_model=PortfolioResponse)  # Handle requests without trailing slash
 async def get_portfolio(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)

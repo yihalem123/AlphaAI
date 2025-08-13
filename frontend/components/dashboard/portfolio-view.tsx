@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/hooks/use-auth'
-import { authService } from '@/lib/auth-service-complete'
+import { useAuth } from '@/components/auth-provider-secure'
+import { authServiceSecure } from '@/lib/auth-service-secure'
 
 interface Asset {
   symbol: string
@@ -88,7 +88,7 @@ export function PortfolioView() {
       setError('')
       
       console.log('📡 Fetching portfolio data...')
-      const response = await authService.getPortfolio()
+      const response = await authServiceSecure.getPortfolio()
       
       if (response.data) {
         console.log('✅ Portfolio data received:', response.data)

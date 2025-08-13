@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/hooks/use-auth'
-import { authService } from '@/lib/auth-service-complete'
+import { useAuth } from '@/components/auth-provider-secure'
+import { authServiceSecure } from '@/lib/auth-service-secure'
 
 interface MarketData {
   market_overview: {
@@ -103,7 +103,7 @@ export function MarketOverview() {
       setIsLoading(true)
       
       console.log('📡 Fetching market data...')
-      const response = await authService.getMarketOverview()
+      const response = await authServiceSecure.getMarketOverview()
       
       if (response.data) {
         console.log('✅ Market data received:', response.data)
