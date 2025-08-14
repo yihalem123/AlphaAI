@@ -27,14 +27,12 @@ export function PaymentMethodModal({
 }: PaymentMethodModalProps) {
   const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'crypto' | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [cryptoType, setCryptoType] = useState<'bitcoin' | 'ethereum' | 'usdt'>('bitcoin')
 
   if (!isOpen) return null
 
   const handleStripePayment = async () => {
     setIsProcessing(true)
     try {
-      // Redirect flow: immediately request Checkout Session and let parent handle redirect
       onPaymentMethodSelect('stripe', {
         plan_id: selectedPlan.id,
         billing_period: selectedPlan.billing_period
@@ -49,15 +47,11 @@ export function PaymentMethodModal({
   const handleCryptoPayment = async () => {
     setIsProcessing(true)
     try {
-      // Initialize crypto payment
-      const paymentData = {
+      onPaymentMethodSelect('crypto', {
         plan_id: selectedPlan.id,
-        amount: selectedPlan.price,
-        currency: selectedPlan.currency,
         billing_period: selectedPlan.billing_period,
-        crypto_type: cryptoType
-      }
-      onPaymentMethodSelect('crypto', paymentData)
+        crypto_type: 'bitcoin'
+      })
     } catch (error) {
       console.error('Crypto payment error:', error)
     } finally {
@@ -65,451 +59,161 @@ export function PaymentMethodModal({
     }
   }
 
-  const cryptoOptions = [
+  const paymentMethods = [
     {
-      id: 'bitcoin',
-      name: 'Bitcoin',
-      symbol: 'BTC',
+      id: 'stripe',
+      name: 'Credit Card',
+      description: 'Pay securely with your credit or debit card',
+      icon: '💳',
+      badges: ['Instant', 'Secure'],
+      popular: true,
+      onClick: handleStripePayment
+    },
+    {
+      id: 'crypto',
+      name: 'Cryptocurrency',
+      description: 'Pay with Bitcoin, Ethereum, or USDT',
       icon: '₿',
-      network: 'Bitcoin Network'
-    },
-    {
-      id: 'ethereum',
-      name: 'Ethereum',
-      symbol: 'ETH',
-      icon: 'Ξ',
-      network: 'Ethereum Network'
-    },
-    {
-      id: 'usdt',
-      name: 'Tether',
-      symbol: 'USDT',
-      icon: '₮',
-      network: 'ERC-20 / TRC-20'
+      badges: ['Anonymous', 'Decentralized'],
+      popular: false,
+      onClick: handleCryptoPayment
     }
   ]
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(10px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '2rem'
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%)',
-        border: '1px solid rgba(102, 126, 234, 0.2)',
-        borderRadius: '24px',
-        maxWidth: '600px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        position: 'relative'
-      }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-slate-700/50 relative">
         {/* Header */}
-        <div style={{
-          padding: '2rem 2rem 1rem 2rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center space-x-4">
             <button
               onClick={onBack}
-              style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '12px',
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 255, 255, 0.2)'
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'rgba(255, 255, 255, 0.1)'
-              }}
+              className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-full flex items-center justify-center text-white transition-colors"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-
             <div>
-              <h2 style={{
-                fontSize: '1.8rem',
-                fontWeight: 700,
-                color: '#ffffff',
-                margin: '0 0 0.25rem 0',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
-              }}>
-                Payment Method
-              </h2>
-              <p style={{
-                color: '#94a3b8',
-                margin: 0,
-                fontSize: '0.9rem'
-              }}>
-                {selectedPlan.name} Plan - ${selectedPlan.price}/{selectedPlan.billing_period === 'monthly' ? 'mo' : 'yr'}
-              </p>
+              <h2 className="text-2xl font-bold text-white">Payment Method</h2>
+              <p className="text-slate-400">Choose how you'd like to pay</p>
             </div>
           </div>
-
+          
           <button
             onClick={onClose}
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '12px',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.2)'
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)'
-            }}
+            className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-full flex items-center justify-center text-white transition-colors"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '2rem' }}>
-          {/* Payment Methods */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{
-              fontSize: '1.2rem',
-              fontWeight: 600,
-              color: '#ffffff',
-              margin: '0 0 1.5rem 0'
-            }}>
-              Choose Payment Method
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Stripe Option */}
-              <div
-                onClick={() => setSelectedMethod('stripe')}
-                style={{
-                  background: selectedMethod === 'stripe' 
-                    ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)'
-                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
-                  border: selectedMethod === 'stripe'
-                    ? '2px solid rgba(102, 126, 234, 0.4)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '16px',
-                  padding: '1.5rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedMethod !== 'stripe') {
-                    e.target.style.borderColor = 'rgba(102, 126, 234, 0.3)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedMethod !== 'stripe') {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                  }
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  marginBottom: '0.75rem'
-                }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    background: 'linear-gradient(135deg, #635bff 0%, #4f46e5 100%)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.5rem',
-                    fontWeight: 700,
-                    color: '#ffffff'
-                  }}>
-                    S
-                  </div>
-                  <div>
-                    <h4 style={{
-                      fontSize: '1.1rem',
-                      fontWeight: 600,
-                      color: '#ffffff',
-                      margin: '0 0 0.25rem 0'
-                    }}>
-                      Credit Card (Stripe)
-                    </h4>
-                    <p style={{
-                      color: '#94a3b8',
-                      margin: 0,
-                      fontSize: '0.85rem'
-                    }}>
-                      Visa, Mastercard, American Express
-                    </p>
-                  </div>
-                </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '0.8rem',
-                  color: '#10b981'
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 12l2 2 4-4"/>
-                    <circle cx="12" cy="12" r="9"/>
-                  </svg>
-                  Instant processing • Secure payments
-                </div>
-              </div>
-
-              {/* Crypto Option */}
-              <div
-                onClick={() => setSelectedMethod('crypto')}
-                style={{
-                  background: selectedMethod === 'crypto' 
-                    ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)'
-                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
-                  border: selectedMethod === 'crypto'
-                    ? '2px solid rgba(102, 126, 234, 0.4)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '16px',
-                  padding: '1.5rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedMethod !== 'crypto') {
-                    e.target.style.borderColor = 'rgba(102, 126, 234, 0.3)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedMethod !== 'crypto') {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                  }
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  marginBottom: '0.75rem'
-                }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    background: 'linear-gradient(135deg, #f7931a 0%, #ff9500 100%)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.5rem',
-                    color: '#ffffff'
-                  }}>
-                    ₿
-                  </div>
-                  <div>
-                    <h4 style={{
-                      fontSize: '1.1rem',
-                      fontWeight: 600,
-                      color: '#ffffff',
-                      margin: '0 0 0.25rem 0'
-                    }}>
-                      Cryptocurrency
-                    </h4>
-                    <p style={{
-                      color: '#94a3b8',
-                      margin: 0,
-                      fontSize: '0.85rem'
-                    }}>
-                      Bitcoin, Ethereum, USDT
-                    </p>
-                  </div>
-                </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '0.8rem',
-                  color: '#10b981'
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 12l2 2 4-4"/>
-                    <circle cx="12" cy="12" r="9"/>
-                  </svg>
-                  Decentralized • Anonymous • Low fees
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Crypto Selection */}
-          {selectedMethod === 'crypto' && (
-            <div style={{ marginBottom: '2rem' }}>
-              <h4 style={{
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: '#ffffff',
-                margin: '0 0 1rem 0'
-              }}>
-                Select Cryptocurrency
-              </h4>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                {cryptoOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => setCryptoType(option.id as any)}
-                    style={{
-                      background: cryptoType === option.id
-                        ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                        : 'rgba(255, 255, 255, 0.05)',
-                      border: cryptoType === option.id
-                        ? '1px solid rgba(102, 126, 234, 0.4)'
-                        : '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '12px',
-                      padding: '0.75rem 1rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      color: '#ffffff',
-                      fontSize: '0.8rem',
-                      minWidth: '80px'
-                    }}
-                  >
-                    <div style={{ fontSize: '1.2rem' }}>{option.icon}</div>
-                    <div style={{ fontWeight: 600 }}>{option.symbol}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button
-              onClick={selectedMethod === 'stripe' ? handleStripePayment : handleCryptoPayment}
-              disabled={!selectedMethod || isProcessing}
-              style={{
-                flex: 1,
-                background: !selectedMethod || isProcessing
-                  ? 'rgba(255, 255, 255, 0.1)'
-                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '1rem',
-                color: '#ffffff',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: !selectedMethod || isProcessing ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                opacity: !selectedMethod || isProcessing ? 0.6 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem'
-              }}
-              onMouseEnter={(e) => {
-                if (selectedMethod && !isProcessing) {
-                  e.target.style.transform = 'translateY(-2px)'
-                  e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (selectedMethod && !isProcessing) {
-                  e.target.style.transform = 'translateY(0)'
-                  e.target.style.boxShadow = 'none'
-                }
-              }}
-            >
-              {isProcessing && (
-                <div style={{
-                  width: '16px',
-                  height: '16px',
-                  border: '2px solid rgba(255, 255, 255, 0.3)',
-                  borderTopColor: '#ffffff',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }} />
-              )}
-              {isProcessing ? 'Processing...' : `Pay with ${selectedMethod === 'stripe' ? 'Card' : 'Crypto'}`}
-            </button>
-          </div>
-
-          {/* Security Note */}
-          <div style={{
-            marginTop: '1.5rem',
-            padding: '1rem',
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-              <path d="M9 12l2 2 4-4"/>
-              <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"/>
-              <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"/>
-              <path d="M13 12h1"/>
-            </svg>
+        {/* Plan Summary */}
+        <div className="bg-slate-800/50 rounded-2xl p-6 mb-8 border border-slate-600/50">
+          <div className="flex items-center justify-between">
             <div>
-              <p style={{
-                color: '#10b981',
-                margin: 0,
-                fontSize: '0.85rem',
-                fontWeight: 600
-              }}>
-                Secure Payment
-              </p>
-              <p style={{
-                color: '#6ee7b7',
-                margin: 0,
-                fontSize: '0.75rem'
-              }}>
-                All payments are encrypted and processed securely. Cancel anytime.
-              </p>
+              <h3 className="text-lg font-semibold text-white">{selectedPlan.name} Plan</h3>
+              <p className="text-slate-400 capitalize">{selectedPlan.billing_period} billing</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-white">${selectedPlan.price}</div>
+              <div className="text-slate-400 text-sm">
+                /{selectedPlan.billing_period === 'monthly' ? 'month' : 'year'}
+              </div>
             </div>
           </div>
         </div>
 
-        <style jsx>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        {/* Payment Methods */}
+        <div className="space-y-4 mb-8">
+          {paymentMethods.map((method) => (
+            <div
+              key={method.id}
+              className={`relative rounded-2xl border transition-all duration-300 cursor-pointer group ${
+                selectedMethod === method.id
+                  ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/20'
+                  : 'border-slate-600/50 bg-slate-800/30 hover:border-blue-500/50 hover:bg-slate-800/50'
+              }`}
+              onClick={() => setSelectedMethod(method.id as 'stripe' | 'crypto')}
+            >
+              {/* Popular Badge */}
+              {method.popular && (
+                <div className="absolute -top-2 left-4">
+                  <span className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    Recommended
+                  </span>
+                </div>
+              )}
+
+              <div className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="text-3xl">{method.icon}</div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">{method.name}</h3>
+                      <p className="text-slate-400 text-sm">{method.description}</p>
+                      <div className="flex space-x-2 mt-2">
+                        {method.badges.map((badge, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded-full"
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className={`w-6 h-6 rounded-full border-2 transition-all ${
+                    selectedMethod === method.id
+                      ? 'border-blue-500 bg-blue-500'
+                      : 'border-slate-500 group-hover:border-blue-400'
+                  }`}>
+                    {selectedMethod === method.id && (
+                      <svg className="w-4 h-4 text-white m-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Continue Button */}
+        <button
+          onClick={selectedMethod === 'stripe' ? handleStripePayment : handleCryptoPayment}
+          disabled={!selectedMethod || isProcessing}
+          className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl transition-all duration-300 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
+        >
+          {isProcessing ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <span>Processing...</span>
+            </>
+          ) : (
+            <>
+              <span>Continue with {selectedMethod === 'stripe' ? 'Credit Card' : 'Cryptocurrency'}</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </>
+          )}
+        </button>
+
+        {/* Security Notice */}
+        <div className="mt-6 text-center">
+          <div className="flex items-center justify-center space-x-2 text-slate-400 text-sm">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span>Your payment information is encrypted and secure</span>
+          </div>
+        </div>
       </div>
     </div>
   )

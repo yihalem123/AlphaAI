@@ -27,20 +27,6 @@ export function PlanSelectionModal({ isOpen, onClose, onSelectPlan }: PlanSelect
 
   const plans: Plan[] = [
     {
-      id: 'free',
-      name: 'Free',
-      price: 0,
-      currency: 'USD',
-      billing_period: billingPeriod,
-      features: [
-        '10 API calls per day',
-        'Basic portfolio tracking',
-        'Limited trading signals',
-        'Basic market data',
-        'Community support'
-      ]
-    },
-    {
       id: 'pro',
       name: 'Pro',
       price: billingPeriod === 'monthly' ? 29 : 290,
@@ -49,14 +35,12 @@ export function PlanSelectionModal({ isOpen, onClose, onSelectPlan }: PlanSelect
       features: [
         '1,000 API calls per day',
         'Advanced portfolio analytics',
-        'Unlimited trading signals',
         'Real-time market data',
         'AI-powered insights',
-        'Technical analysis tools',
         'Priority support'
       ],
       popular: true,
-      savings: billingPeriod === 'yearly' ? 'Save $58/year' : undefined
+      savings: billingPeriod === 'yearly' ? '2 months free' : undefined
     },
     {
       id: 'premium',
@@ -69,353 +53,146 @@ export function PlanSelectionModal({ isOpen, onClose, onSelectPlan }: PlanSelect
         'Advanced portfolio management',
         'Custom trading strategies',
         'Real-time notifications',
-        'Advanced AI analysis',
-        'Custom indicators',
-        'White-label solutions',
         'Dedicated support',
         'API access'
       ],
       highlighted: true,
-      savings: billingPeriod === 'yearly' ? 'Save $198/year' : undefined
+      savings: billingPeriod === 'yearly' ? '2 months free' : undefined
     }
   ]
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(10px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '2rem'
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%)',
-        border: '1px solid rgba(102, 126, 234, 0.2)',
-        borderRadius: '24px',
-        maxWidth: '1200px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        position: 'relative'
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: '2rem 2rem 1rem 2rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <h2 style={{
-              fontSize: '1.8rem',
-              fontWeight: 700,
-              color: '#ffffff',
-              margin: '0 0 0.5rem 0',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              Choose Your Plan
-            </h2>
-            <p style={{
-              color: '#94a3b8',
-              margin: 0,
-              fontSize: '1rem'
-            }}>
-              Unlock the full power of AI trading
-            </p>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-4xl w-full shadow-2xl border border-slate-700/50 relative">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-full flex items-center justify-center text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
 
-          <button
-            onClick={onClose}
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '12px',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.2)'
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)'
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-white mb-3">
+            Choose Your Plan
+          </h2>
+          <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+            Unlock powerful AI trading features and take your portfolio to the next level
+          </p>
         </div>
 
         {/* Billing Period Toggle */}
-        <div style={{
-          padding: '1.5rem 2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '12px',
-            padding: '6px',
-            display: 'flex',
-            gap: '6px'
-          }}>
+        <div className="flex justify-center mb-10">
+          <div className="bg-slate-800 rounded-full p-1 border border-slate-600">
             <button
               onClick={() => setBillingPeriod('monthly')}
-              style={{
-                background: billingPeriod === 'monthly' 
-                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                  : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.75rem 1.5rem',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.9rem',
-                fontWeight: 600
-              }}
+              className={`px-6 py-3 rounded-full font-medium transition-all ${
+                billingPeriod === 'monthly'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
             >
               Monthly
             </button>
             <button
               onClick={() => setBillingPeriod('yearly')}
-              style={{
-                background: billingPeriod === 'yearly' 
-                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                  : 'transparent',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.75rem 1.5rem',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                position: 'relative'
-              }}
+              className={`px-6 py-3 rounded-full font-medium transition-all relative ${
+                billingPeriod === 'yearly'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
             >
               Yearly
               {billingPeriod === 'yearly' && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-8px',
-                  right: '-8px',
-                  background: '#10b981',
-                  color: '#ffffff',
-                  fontSize: '0.7rem',
-                  padding: '2px 6px',
-                  borderRadius: '6px',
-                  fontWeight: 700
-                }}>
-                  SAVE
-                </div>
+                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                  Save 20%
+                </span>
               )}
             </button>
           </div>
         </div>
 
         {/* Plans Grid */}
-        <div style={{
-          padding: '1rem 2rem 2rem 2rem',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '1.5rem'
-        }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {plans.map((plan) => (
             <div
               key={plan.id}
-              style={{
-                background: plan.highlighted 
-                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)'
-                  : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
-                border: plan.highlighted 
-                  ? '2px solid rgba(102, 126, 234, 0.4)'
-                  : '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '20px',
-                padding: '2rem',
-                position: 'relative',
-                transition: 'all 0.3s ease',
-                cursor: plan.id !== 'free' ? 'pointer' : 'default',
-                transform: plan.highlighted ? 'scale(1.05)' : 'scale(1)'
-              }}
-              onMouseEnter={(e) => {
-                if (plan.id !== 'free') {
-                  e.target.style.transform = plan.highlighted ? 'scale(1.08)' : 'scale(1.03)'
-                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.6)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (plan.id !== 'free') {
-                  e.target.style.transform = plan.highlighted ? 'scale(1.05)' : 'scale(1)'
-                  e.target.style.borderColor = plan.highlighted 
-                    ? 'rgba(102, 126, 234, 0.4)'
-                    : 'rgba(255, 255, 255, 0.1)'
-                }
-              }}
-              onClick={() => {
-                if (plan.id !== 'free') {
-                  onSelectPlan(plan)
-                }
-              }}
+              className={`relative rounded-2xl p-8 transition-all duration-300 cursor-pointer group ${
+                plan.highlighted
+                  ? 'bg-gradient-to-br from-blue-600/20 to-purple-600/20 border-2 border-blue-500/50 shadow-xl shadow-blue-500/10 scale-105'
+                  : 'bg-slate-800/50 border border-slate-600/50 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5'
+              }`}
+              onClick={() => onSelectPlan(plan)}
             >
               {/* Popular Badge */}
               {plan.popular && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-12px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: '#ffffff',
-                  padding: '6px 16px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)'
-                }}>
-                  MOST POPULAR
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-bold px-4 py-1 rounded-full shadow-lg">
+                    Most Popular
+                  </span>
                 </div>
               )}
 
-              {/* Plan Header */}
-              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                <h3 style={{
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  color: '#ffffff',
-                  margin: '0 0 0.5rem 0'
-                }}>
-                  {plan.name}
-                </h3>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'center',
-                  gap: '0.25rem',
-                  marginBottom: '0.5rem'
-                }}>
-                  <span style={{
-                    fontSize: '3rem',
-                    fontWeight: 800,
-                    color: '#ffffff'
-                  }}>
-                    ${plan.price}
-                  </span>
-                  <span style={{
-                    fontSize: '1rem',
-                    color: '#94a3b8'
-                  }}>
-                    /{billingPeriod === 'monthly' ? 'mo' : 'yr'}
+              {/* Best Value Badge */}
+              {plan.highlighted && (
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-bold px-4 py-1 rounded-full shadow-lg">
+                    Best Value
                   </span>
                 </div>
+              )}
 
+              {/* Plan Content */}
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <div className="mb-4">
+                  <span className="text-4xl font-bold text-white">${plan.price}</span>
+                  <span className="text-slate-400 ml-2">
+                    /{billingPeriod === 'monthly' ? 'month' : 'year'}
+                  </span>
+                </div>
                 {plan.savings && (
-                  <div style={{
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.2)',
-                    borderRadius: '8px',
-                    padding: '4px 8px',
-                    fontSize: '0.8rem',
-                    color: '#10b981',
-                    fontWeight: 600,
-                    display: 'inline-block'
-                  }}>
+                  <div className="text-green-400 font-semibold text-sm">
                     {plan.savings}
                   </div>
                 )}
               </div>
 
-              {/* Features List */}
-              <div style={{ marginBottom: '2rem' }}>
-                {plan.features.map((feature, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      marginBottom: '0.75rem',
-                      color: '#e2e8f0',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <div style={{
-                      width: '16px',
-                      height: '16px',
-                      borderRadius: '50%',
-                      background: plan.highlighted 
-                        ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                        : '#10b981',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                        <path d="M9 12l2 2 4-4"/>
-                      </svg>
-                    </div>
-                    {feature}
+              {/* Features */}
+              <div className="space-y-4 mb-8">
+                {plan.features.map((feature, idx) => (
+                  <div key={idx} className="flex items-center">
+                    <svg className="w-5 h-5 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-slate-300">{feature}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Action Button */}
+              {/* CTA Button */}
               <button
-                disabled={plan.id === 'free'}
-                style={{
-                  width: '100%',
-                  background: plan.id === 'free'
-                    ? 'rgba(255, 255, 255, 0.1)'
-                    : plan.highlighted
-                      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                      : 'linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  color: '#ffffff',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: plan.id === 'free' ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  opacity: plan.id === 'free' ? 0.6 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (plan.id !== 'free') {
-                    e.target.style.transform = 'translateY(-2px)'
-                    e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (plan.id !== 'free') {
-                    e.target.style.transform = 'translateY(0)'
-                    e.target.style.boxShadow = 'none'
-                  }
-                }}
+                onClick={() => onSelectPlan(plan)}
+                className={`w-full py-4 px-6 rounded-xl font-semibold transition-all duration-300 ${
+                  plan.highlighted
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl'
+                }`}
               >
-                {plan.id === 'free' ? 'Current Plan' : 'Select Plan'}
+                Get Started with {plan.name}
               </button>
             </div>
           ))}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-10 pt-6 border-t border-slate-700">
+          <p className="text-slate-400 text-sm">
+            All plans include 30-day money back guarantee • Cancel anytime
+          </p>
         </div>
       </div>
     </div>

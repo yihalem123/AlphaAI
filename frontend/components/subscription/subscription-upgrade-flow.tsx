@@ -197,16 +197,7 @@ function SuccessModal({
       zIndex: 1000,
       padding: '2rem'
     }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%)',
-        border: '1px solid rgba(16, 185, 129, 0.3)',
-        borderRadius: '24px',
-        maxWidth: '500px',
-        width: '100%',
-        position: 'relative',
-        textAlign: 'center',
-        padding: '3rem 2rem 2rem 2rem'
-      }}>
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl border border-green-500/30 relative overflow-hidden text-center">
         {/* Success Animation */}
         <div style={{
           width: '80px',
