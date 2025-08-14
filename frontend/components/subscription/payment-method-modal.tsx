@@ -81,7 +81,7 @@ export function PaymentMethodModal({
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-slate-700/50 relative">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
