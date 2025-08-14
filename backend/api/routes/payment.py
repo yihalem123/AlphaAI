@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import os
@@ -17,6 +18,9 @@ router = APIRouter()
 
 # In-memory subscriptions store (temporary placeholder if DB not used here)
 subscriptions_db: Dict[int, Any] = {}
+CHECKOUT_EXCHANGES: Dict[str, Any] = {}
+# Payment session preservation
+PAYMENT_AUTH_PRESERVATION: Dict[str, Any] = {}
 
 # Helper to resolve Stripe price IDs from environment
 def _get_stripe_price_id(plan_type: str, billing_period: str) -> Optional[str]:
@@ -81,8 +85,7 @@ async def create_checkout_session(
             except Exception:
                 print("[checkout] silent refresh failed")
 
-    if not current_user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    # If still no session, proceed without attaching customer; user will be resolved on success via email
 
     # Validate plan
     if payload.plan_type not in SUBSCRIPTION_PLANS:
@@ -491,6 +494,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     async def activate_user_subscription(user_id: int, plan_type: str, period_end_unix: Optional[int]):
         # Compute expiry
         expires = datetime.utcfromtimestamp(period_end_unix) if period_end_unix else (datetime.utcnow() + timedelta(days=30))
+        print(f"[webhook] Activating subscription for user {user_id}: {plan_type} until {expires}")
         await db.execute(
             update(User)
             .where(User.id == user_id)
@@ -501,19 +505,28 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             )
         )
         await db.commit()
+        print(f"[webhook] Subscription activated successfully for user {user_id}")
 
     try:
         if event_type == "checkout.session.completed":
+            print(f"[webhook] Processing checkout.session.completed event")
             metadata = data_obj.get("metadata", {})
-            user_id = int(metadata.get("user_id") or data_obj.get("client_reference_id"))
+            user_id = metadata.get("user_id") or data_obj.get("client_reference_id")
             plan_type = metadata.get("plan_type", "pro")
-            # Retrieve subscription to get period end
-            subscription_id = data_obj.get("subscription")
-            period_end = None
-            if subscription_id:
-                sub = stripe.Subscription.retrieve(subscription_id)
-                period_end = sub["current_period_end"]
-            await activate_user_subscription(user_id, plan_type, period_end)
+            print(f"[webhook] Found user_id: {user_id}, plan_type: {plan_type}")
+            
+            if user_id:
+                user_id = int(user_id)
+                # Retrieve subscription to get period end
+                subscription_id = data_obj.get("subscription")
+                period_end = None
+                if subscription_id:
+                    sub = stripe.Subscription.retrieve(subscription_id)
+                    period_end = sub["current_period_end"]
+                    print(f"[webhook] Found subscription: {subscription_id}, period_end: {period_end}")
+                await activate_user_subscription(user_id, plan_type, period_end)
+            else:
+                print(f"[webhook] ERROR: No user_id found in metadata or client_reference_id")
         elif event_type in ("customer.subscription.updated", "customer.subscription.created"):
             # Best-effort: get user id from latest invoice/customer's email
             subscription_id = data_obj.get("id")
@@ -565,3 +578,304 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=200, detail=f"Handled with warning: {e}")
 
     return {"received": True}
+
+
+# ============ Test/Debug endpoints ============
+
+@router.get("/subscription-status")
+async def get_subscription_status(
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get current user's subscription status"""
+    try:
+        # Refresh user data from database
+        result = await db.execute(select(User).where(User.id == current_user.id))
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "user_id": user.id,
+            "email": user.email,
+            "subscription_tier": user.subscription_tier,
+            "subscription_expires": user.subscription_expires.isoformat() if user.subscription_expires else None,
+            "daily_limit": user.daily_limit,
+            "api_calls_count": user.api_calls_count,
+            "is_active": user.subscription_expires > datetime.utcnow() if user.subscription_expires else user.subscription_tier == "free"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get subscription status: {e}")
+
+@router.post("/test-subscription-activation")
+async def test_subscription_activation(
+    user_id: int,
+    plan_type: str = "pro",
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Test endpoint to manually activate subscription (for debugging)"""
+    try:
+        # Only allow users to activate their own subscription or admins
+        if current_user.id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        expires = datetime.utcnow() + timedelta(days=30)
+        await db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                subscription_tier=plan_type,
+                subscription_expires=expires,
+                daily_limit=SUBSCRIPTION_PLANS.get(plan_type, SUBSCRIPTION_PLANS["pro"]).api_calls_limit
+            )
+        )
+        await db.commit()
+        
+        return {
+            "message": f"Subscription activated for user {user_id}",
+            "plan_type": plan_type,
+            "expires": expires.isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to activate subscription: {e}")
+
+
+# ============ Redirect helpers to avoid CORS/auth header issues ============
+
+@router.get("/checkout/redirect")
+async def checkout_redirect(
+    plan_type: str,
+    billing_period: str = "monthly",
+    request: Request = None,
+    response: Response = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_optional)
+):
+    """Create a Stripe Checkout Session and redirect the browser to it.
+    Preserve authentication state during payment flow.
+    """
+    if not STRIPE_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stripe not available")
+
+    # Attempt silent refresh if session missing/expired, but do not block checkout
+    if not current_user:
+        refresh_cookie = request.cookies.get("refresh_token") if request else None
+        if refresh_cookie:
+            try:
+                user, new_tokens = await enhanced_auth_service.refresh_user_tokens(db, refresh_cookie, request)
+                enhanced_auth_service.set_auth_cookies(response, new_tokens)
+                current_user = user
+            except Exception:
+                pass
+
+    if plan_type not in SUBSCRIPTION_PLANS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid plan type: {plan_type}")
+
+    price_id = _get_stripe_price_id(plan_type, billing_period)
+    if not price_id:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Missing Stripe price configuration")
+
+    # Create a payment session ID to preserve auth state
+    payment_session_id = secrets.token_urlsafe(32)
+    
+    # Preserve authentication info for this payment session
+    if current_user:
+        PAYMENT_AUTH_PRESERVATION[payment_session_id] = {
+            "user_id": current_user.id,
+            "email": current_user.email,
+            "subscription_tier": current_user.subscription_tier,
+            "created_at": datetime.utcnow(),
+            "expires_at": datetime.utcnow() + timedelta(hours=2)  # 2 hour window for payment
+        }
+        print(f"[PAYMENT] Preserved auth for user {current_user.id} with session {payment_session_id}")
+
+    frontend_success = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/?checkout=success")
+    frontend_cancel  = os.getenv("STRIPE_CANCEL_URL",  "http://localhost:3000/?checkout=cancel")
+    backend_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+    
+    # Include payment session ID in success URL
+    success_url = f"{backend_base}/api/payment/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&payment_session={payment_session_id}&redirect={frontend_success}"
+    cancel_url  = f"{frontend_cancel}"
+
+    try:
+        customer_id = _get_or_create_stripe_customer_for_user(current_user) if current_user else None
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=str(current_user.id) if current_user else None,
+            metadata={
+                **({"user_id": str(current_user.id)} if current_user else {}),
+                "plan_type": plan_type,
+                "billing_period": billing_period,
+                "payment_session_id": payment_session_id,
+            },
+            customer=customer_id,
+        )
+        return RedirectResponse(url=session.url, status_code=303)
+    except Exception as e:
+        # Clean up preservation data on error
+        PAYMENT_AUTH_PRESERVATION.pop(payment_session_id, None)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Stripe error: {e}")
+
+
+@router.get("/billing-portal/redirect")
+async def billing_portal_redirect(
+    request: Request,
+    current_user = Depends(get_current_user)
+):
+    if not STRIPE_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stripe not available")
+    try:
+        customer_id = _get_or_create_stripe_customer_for_user(current_user)
+        return_url = os.getenv("STRIPE_PORTAL_RETURN_URL", "http://localhost:3000/dashboard")
+        session = stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url)
+        return RedirectResponse(url=session.url, status_code=303)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stripe portal error: {e}")
+
+
+@router.get("/checkout/success")
+async def checkout_success(
+    session_id: str,
+    payment_session: Optional[str] = None,
+    redirect: Optional[str] = None,
+    request: Request = None,
+    response: Response = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Stripe returns here after successful checkout. Activate subscription and restore authentication."""
+    try:
+        print(f"[SUCCESS] Processing checkout success for session: {session_id}, payment_session: {payment_session}")
+        
+        if not STRIPE_AVAILABLE:
+            return RedirectResponse(url=redirect or "/", status_code=303)
+        
+        # Retrieve Stripe session
+        session = stripe.checkout.Session.retrieve(session_id)
+        print(f"[SUCCESS] Retrieved Stripe session: {session.id}")
+        
+        # Get user from session metadata
+        metadata = session.get("metadata", {})
+        user_id = metadata.get("user_id") or session.get("client_reference_id")
+        plan_type = metadata.get("plan_type", "pro")
+        
+        print(f"[SUCCESS] Session metadata - user_id: {user_id}, plan_type: {plan_type}")
+        
+        if not user_id:
+            print("[SUCCESS] ERROR: No user_id found in session")
+            return RedirectResponse(url=(redirect or "/") + "?error=no_user", status_code=303)
+        
+        # IMMEDIATELY activate subscription (don't wait for webhook)
+        user_id = int(user_id)
+        expires = datetime.utcnow() + timedelta(days=30)  # Default 30 days
+        
+        # Get subscription details from Stripe if available
+        subscription_id = session.get("subscription")
+        if subscription_id:
+            try:
+                sub = stripe.Subscription.retrieve(subscription_id)
+                expires = datetime.utcfromtimestamp(sub["current_period_end"])
+                print(f"[SUCCESS] Got subscription period end: {expires}")
+            except Exception as e:
+                print(f"[SUCCESS] Warning: Could not retrieve subscription details: {e}")
+        
+        # Update user subscription in database
+        print(f"[SUCCESS] Activating subscription for user {user_id}: {plan_type} until {expires}")
+        
+        result = await db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                subscription_tier=plan_type,
+                subscription_expires=expires,
+                daily_limit=SUBSCRIPTION_PLANS.get(plan_type, SUBSCRIPTION_PLANS["pro"]).api_calls_limit
+            )
+        )
+        await db.commit()
+        
+        print(f"[SUCCESS] Subscription activated successfully for user {user_id}")
+        
+        # Try to restore authentication using preserved session
+        auth_code = None
+        if payment_session and payment_session in PAYMENT_AUTH_PRESERVATION:
+            preserved = PAYMENT_AUTH_PRESERVATION[payment_session]
+            
+            # Check if preservation hasn't expired and matches the user
+            if (preserved["expires_at"] > datetime.utcnow() and 
+                preserved["user_id"] == user_id):
+                
+                try:
+                    # Get fresh user data from DB
+                    user_result = await db.execute(select(User).where(User.id == user_id))
+                    user = user_result.scalar_one_or_none()
+                    
+                    if user:
+                        # Create fresh authentication tokens
+                        class _MockRequest:
+                            def __init__(self):
+                                self.client = type("c", (), {"host": "127.0.0.1"})()
+                                self.headers = {}
+                        
+                        mock_request = _MockRequest()
+                        tokens = await enhanced_auth_service.create_auth_tokens(db, user, mock_request, remember_me=True)
+                        enhanced_auth_service.set_auth_cookies(response, tokens)
+                        
+                        # Create one-time exchange code for frontend
+                        auth_code = secrets.token_urlsafe(16)
+                        CHECKOUT_EXCHANGES[auth_code] = {
+                            "user_id": user.id,
+                            "tokens": tokens,
+                            "expires_at": datetime.utcnow() + timedelta(minutes=5)
+                        }
+                        
+                        print(f"[SUCCESS] Created fresh auth tokens and exchange code for user {user_id}")
+                        
+                    # Clean up preserved data
+                    PAYMENT_AUTH_PRESERVATION.pop(payment_session, None)
+                    
+                except Exception as e:
+                    print(f"[SUCCESS] Warning: Could not restore authentication: {e}")
+        
+        # Create redirect URL
+        redirect_url = redirect or "http://localhost:3000"
+        sep = '&' if ('?' in redirect_url) else '?'
+        
+        if auth_code:
+            final_url = f"{redirect_url}{sep}payment_success=true&plan={plan_type}&code={auth_code}"
+        else:
+            final_url = f"{redirect_url}{sep}payment_success=true&plan={plan_type}&user_id={user_id}"
+        
+        print(f"[SUCCESS] Redirecting to: {final_url}")
+        
+        return RedirectResponse(url=final_url, status_code=302)
+        
+    except Exception as e:
+        print(f"[SUCCESS] ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return RedirectResponse(url=(redirect or "http://localhost:3000") + "?error=processing_failed", status_code=302)
+
+
+@router.get("/exchange")
+async def exchange_code_for_session(code: str, response: Response):
+    """Front-end calls this with a one-time code to receive fresh cookies and token payload."""
+    record = CHECKOUT_EXCHANGES.get(code)
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    if record["expires_at"] < datetime.utcnow():
+        CHECKOUT_EXCHANGES.pop(code, None)
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    tokens = record["tokens"]
+    # Set cookies again (in case browser missed prior Set-Cookie)
+    enhanced_auth_service.set_auth_cookies(response, tokens)
+    # Remove code after use
+    CHECKOUT_EXCHANGES.pop(code, None)
+    return {
+        "access_token": tokens.get("access_token"),
+        "expires_in": tokens.get("expires_in"),
+        "session_id": tokens.get("session_id")
+    }

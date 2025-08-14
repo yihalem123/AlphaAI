@@ -23,7 +23,7 @@ interface SubscriptionUpgradeFlowProps {
   onSuccess?: (subscriptionData: any) => void
 }
 
-type FlowStep = 'plan-selection' | 'payment-method' | 'crypto-payment' | 'success'
+type FlowStep = 'plan-selection' | 'payment-method' | 'stripe-payment' | 'crypto-payment' | 'success'
 
 export function SubscriptionUpgradeFlow({ 
   isOpen, 
@@ -35,7 +35,7 @@ export function SubscriptionUpgradeFlow({
   const [paymentData, setPaymentData] = useState<any>(null)
   const [subscriptionResult, setSubscriptionResult] = useState<any>(null)
   const [error, setError] = useState<string>('')
-  const { updateUser } = useAuth()
+  const { updateUser, refreshUser } = useAuth()
 
   const handlePlanSelect = (plan: Plan) => {
     setSelectedPlan(plan)
@@ -49,27 +49,13 @@ export function SubscriptionUpgradeFlow({
       // Immediately create Checkout Session and redirect (use secure service with cookies)
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const resp = await fetch(`${API_BASE}/api/payment/create-checkout-session`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            plan_type: selectedPlan.id,
-            billing_period: selectedPlan.billing_period || 'monthly',
-            success_url: `${window.location.origin}?checkout=success`,
-            cancel_url: `${window.location.origin}?checkout=cancel`
-          })
+        // Use backend redirect endpoint for full-page navigation (ensures cookies are sent)
+        const params = new URLSearchParams({
+          plan_type: selectedPlan.id,
+          billing_period: selectedPlan.billing_period || 'monthly',
         })
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}))
-          throw new Error(err.detail || 'Failed to create checkout session')
-        }
-        const data = await resp.json()
-        if (data?.url) {
-          window.location.href = data.url
-          return
-        }
-        throw new Error('Invalid checkout session response')
+        window.location.href = `${API_BASE}/api/payment/checkout/redirect?${params.toString()}`
+        return
       } catch (e: any) {
         setError(e.message || 'Stripe checkout failed')
       }
@@ -78,16 +64,12 @@ export function SubscriptionUpgradeFlow({
     }
   }
 
-  const handlePaymentSuccess = (subscriptionData: any) => {
+  const handlePaymentSuccess = async (subscriptionData: any) => {
     setSubscriptionResult(subscriptionData)
     setCurrentStep('success')
     
-    // Update user subscription tier
-    updateUser({
-      subscription_tier: selectedPlan?.id || 'pro',
-      daily_limit: selectedPlan?.id === 'premium' ? 999999 : 1000,
-      api_calls_count: 0 // Reset daily usage
-    })
+    // Refresh user data from server to get updated subscription info
+    await refreshUser()
 
     // Call success callback if provided
     onSuccess?.(subscriptionData)
@@ -400,12 +382,14 @@ function SuccessModal({
             transition: 'all 0.2s ease'
           }}
           onMouseEnter={(e) => {
-            e.target.style.transform = 'translateY(-2px)'
-            e.target.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.4)'
+            const target = e.target as HTMLElement
+            target.style.transform = 'translateY(-2px)'
+            target.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.4)'
           }}
           onMouseLeave={(e) => {
-            e.target.style.transform = 'translateY(0)'
-            e.target.style.boxShadow = 'none'
+            const target = e.target as HTMLElement
+            target.style.transform = 'translateY(0)'
+            target.style.boxShadow = 'none'
           }}
         >
           Start Using {selectedPlan.name}

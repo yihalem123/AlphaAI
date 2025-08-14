@@ -748,7 +748,7 @@ function AuthForm({
 
 export default function Home() {
   // Use the secure AuthProvider context
-  const { user, isLoading, login, register, logout, isAuthenticated } = useAuth()
+  const { user, isLoading, login, register, logout, isAuthenticated, refreshUser, forceRefreshAuth } = useAuth()
   const { event: securityEvent, dismiss: dismissSecurityEvent } = useSecurityNotification()
 
   const [showAuth, setShowAuth] = useState(false)
@@ -757,6 +757,110 @@ export default function Home() {
   const [success, setSuccess] = useState('')
   const [showPayment, setShowPayment] = useState(false)
   const [selectedPaymentPlan, setSelectedPaymentPlan] = useState<any>(null)
+
+  // Handle payment success/error parameters
+  useEffect(() => {
+    const handlePaymentReturn = async () => {
+      const urlParams = new URLSearchParams(window.location.search)
+      const paymentSuccess = urlParams.get('payment_success')
+      const planType = urlParams.get('plan')
+      const error = urlParams.get('error')
+      const checkoutStatus = urlParams.get('checkout')
+
+      // Handle payment success
+      if (paymentSuccess === 'true') {
+        console.log('🎉 Payment successful! Plan:', planType)
+        const planName = planType === 'pro' ? 'Pro' : planType === 'premium' ? 'Premium' : 'subscription'
+        setSuccess(`🎉 Payment successful! Your ${planName} subscription has been activated.`)
+        
+        // Check if we have an auth code to exchange
+        const authCode = urlParams.get('code')
+        if (authCode) {
+          console.log('🔄 Found auth exchange code, restoring authentication...')
+          try {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            const response = await fetch(`${API_BASE}/api/payment/exchange?code=${authCode}`, {
+              method: 'GET',
+              credentials: 'include',
+            })
+            
+            if (response.ok) {
+              const data = await response.json()
+              console.log('✅ Authentication restored successfully:', data)
+              setTimeout(async () => {
+                await refreshUser()
+                console.log('✅ User data refreshed with new authentication')
+              }, 500)
+            } else {
+              console.error('❌ Failed to exchange auth code:', response.status)
+              // Fallback to force refresh
+              setTimeout(async () => {
+                await forceRefreshAuth()
+              }, 100)
+            }
+          } catch (error) {
+            console.error('❌ Auth exchange error:', error)
+            // Fallback to force refresh
+            setTimeout(async () => {
+              await forceRefreshAuth()
+            }, 100)
+          }
+        } else if (!isAuthenticated) {
+          console.log('⚠️ User appears to be logged out after payment - attempting to restore session')
+          setTimeout(async () => {
+            await forceRefreshAuth()
+            console.log('🔄 Attempted to force refresh authentication after payment')
+          }, 100)
+        } else {
+          // User is still authenticated, just refresh subscription data
+          setTimeout(async () => {
+            await refreshUser()
+            console.log('✅ User data refreshed - subscription should be active')
+          }, 500)
+        }
+        
+        // Clean up URL parameters
+        setTimeout(() => {
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, document.title, newUrl)
+        }, 3000)
+      }
+      
+      // Handle payment errors
+      else if (error) {
+        console.error('❌ Payment error:', error)
+        switch (error) {
+          case 'no_user':
+            setError('Payment completed but user not found. Please contact support.')
+            break
+          case 'processing_failed':
+            setError('Payment processing failed. Please contact support if you were charged.')
+            break
+          default:
+            setError('There was an issue processing your payment. Please contact support.')
+        }
+        
+        // Clean up URL parameters
+        setTimeout(() => {
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, document.title, newUrl)
+        }, 5000)
+      }
+      
+      // Handle checkout cancellation
+      else if (checkoutStatus === 'cancel') {
+        setError('Payment was cancelled. You can try again anytime.')
+        
+        // Clean up URL parameters
+        setTimeout(() => {
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, document.title, newUrl)
+        }, 3000)
+      }
+    }
+
+    handlePaymentReturn()
+  }, [refreshUser]) // Include refreshUser in dependencies
 
   // Handle authentication form submission
   const handleAuth = async (email: string, password: string, name?: string) => {

@@ -17,7 +17,7 @@ export function ProtectedRoute({
   requiredPermissions = ['read'],
   requiredTier = 'free'
 }: ProtectedRouteProps) {
-  return (
+    return (
     <ProtectedRouteSecure
       requireAuth={requireAuth}
       requiredPermissions={requiredPermissions}

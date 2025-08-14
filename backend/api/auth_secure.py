@@ -237,6 +237,24 @@ async def get_current_user(
         refreshed_user = await try_refresh_and_return_user()
         if refreshed_user:
             return refreshed_user
+        # Fallback: if success flow set a short-lived session_code cookie, exchange it
+        session_code = request.cookies.get("session_code")
+        if session_code:
+            from api.routes.payment import CHECKOUT_EXCHANGES
+            record = CHECKOUT_EXCHANGES.get(session_code)
+            if record and record.get("expires_at") and record["expires_at"] > datetime.utcnow():
+                # issue fresh cookies
+                enhanced = record["tokens"]
+                try:
+                    enhanced_auth_service.set_auth_cookies(response, enhanced)
+                    CHECKOUT_EXCHANGES.pop(session_code, None)
+                except Exception:
+                    pass
+                # Return user from DB
+                result = await db.execute(select(User).where(User.id == record["user_id"]))
+                user = result.scalar_one_or_none()
+                if user:
+                    return user
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",

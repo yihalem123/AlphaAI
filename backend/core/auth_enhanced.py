@@ -702,6 +702,18 @@ class EnhancedAuthService:
     def set_auth_cookies(self, response: Response, tokens: Dict[str, Any]):
         """Set secure HTTP-only cookies for tokens"""
         
+        # Ensure legacy path cookie is removed to avoid duplicate-name conflicts
+        legacy_cookie_settings = {
+            "httponly": AuthConfig.COOKIE_HTTPONLY,
+            "secure": AuthConfig.COOKIE_SECURE,
+            "samesite": AuthConfig.COOKIE_SAMESITE,
+            "domain": AuthConfig.COOKIE_DOMAIN
+        }
+        try:
+            response.delete_cookie(key="refresh_token", path="/api/auth", **legacy_cookie_settings)
+        except Exception:
+            pass
+
         # Access token cookie (short-lived)
         response.set_cookie(
             key="access_token",
@@ -724,17 +736,6 @@ class EnhancedAuthService:
             samesite=AuthConfig.COOKIE_SAMESITE,
             domain=AuthConfig.COOKIE_DOMAIN,
             path="/"  # Make available to all API routes for silent refresh
-        )
-        # Also set legacy path to support older flows
-        response.set_cookie(
-            key="refresh_token",
-            value=tokens["refresh_token"],
-            max_age=AuthConfig.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-            httponly=AuthConfig.COOKIE_HTTPONLY,
-            secure=AuthConfig.COOKIE_SECURE,
-            samesite=AuthConfig.COOKIE_SAMESITE,
-            domain=AuthConfig.COOKIE_DOMAIN,
-            path="/api/auth"
         )
     
     def clear_auth_cookies(self, response: Response):

@@ -44,6 +44,8 @@ interface AuthContextType {
   register: (userData: RegisterData) => Promise<AuthResult>
   logout: (logoutAll?: boolean) => Promise<void>
   refreshUser: () => Promise<void>
+  updateUser: (userData: Partial<User>) => void
+  forceRefreshAuth: () => Promise<void>
   
   // Session management
   getUserSessions: () => Promise<SessionInfo[]>
@@ -153,15 +155,18 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
       const storedUser = authServiceSecure.getUserFromStorage()
       if (storedUser) {
         setUser(storedUser)
+        console.log('📱 Loaded stored user data:', storedUser.email)
       }
 
       // Verify authentication with server
+      console.log('🔍 Verifying authentication with server...')
       const response = await authServiceSecure.getCurrentUser()
       
       if (response.data) {
         // User is authenticated
         setUser(response.data)
         authServiceSecure.setUserData(response.data)
+        console.log('✅ Server confirmed authentication:', response.data.email, response.data.subscription_tier)
         
         addSecurityEvent({
           type: 'info',
@@ -169,10 +174,12 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
           autoHide: true
         })
       } else if (response.status === 401) {
+        console.log('❌ Server says not authenticated (401)')
         // Not authenticated, try development mode in dev environment
         await tryDevelopmentAuth()
       } else if (response.status === 0) {
         // Network error
+        console.log('🌐 Network error - working offline')
         addSecurityEvent({
           type: 'warning',
           message: 'Unable to connect to server. Working in offline mode.',
@@ -180,6 +187,7 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
         })
         setIsOnline(false)
       } else {
+        console.log('⚠️ Other auth error:', response.status)
         // Other error
         await tryDevelopmentAuth()
       }
@@ -384,10 +392,12 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
 
   const refreshUser = useCallback(async () => {
     try {
+      console.log('🔄 Refreshing user data...')
       const response = await authServiceSecure.getCurrentUser()
       if (response.data) {
         setUser(response.data)
         authServiceSecure.setUserData(response.data)
+        console.log('✅ User data refreshed:', response.data.subscription_tier)
       } else if (response.status === 401) {
         // Session expired
         setUser(null)
@@ -411,6 +421,22 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
       }
     }
   }, [addSecurityEvent])
+
+  // Update user data (for subscription changes)
+  const updateUser = useCallback((userData: Partial<User>) => {
+    if (user) {
+      const updatedUser = { ...user, ...userData }
+      setUser(updatedUser)
+      authServiceSecure.setUserData(updatedUser)
+    }
+  }, [user])
+
+  // Force re-initialize authentication (for payment flow issues)
+  const forceRefreshAuth = useCallback(async () => {
+    console.log('🔄 Force refreshing authentication...')
+    initializationRef.current = false
+    await initializeAuth()
+  }, [initializeAuth])
 
   // Session management
   const getUserSessions = useCallback(async (): Promise<SessionInfo[]> => {
@@ -496,6 +522,8 @@ export function AuthProviderSecure({ children }: AuthProviderProps) {
     register,
     logout,
     refreshUser,
+    updateUser,
+    forceRefreshAuth,
     
     // Session management
     getUserSessions,
