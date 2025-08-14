@@ -22,6 +22,20 @@ CHECKOUT_EXCHANGES: Dict[str, Any] = {}
 # Payment session preservation
 PAYMENT_AUTH_PRESERVATION: Dict[str, Any] = {}
 
+# Cleanup expired preservation data
+async def cleanup_expired_preservation():
+    """Remove expired auth preservation data"""
+    current_time = datetime.utcnow()
+    expired_keys = [
+        key for key, data in PAYMENT_AUTH_PRESERVATION.items()
+        if data.get("expires_at", current_time) <= current_time
+    ]
+    for key in expired_keys:
+        PAYMENT_AUTH_PRESERVATION.pop(key, None)
+    
+    if expired_keys:
+        print(f"[CLEANUP] Removed {len(expired_keys)} expired payment auth preservation entries")
+
 # Helper to resolve Stripe price IDs from environment
 def _get_stripe_price_id(plan_type: str, billing_period: str) -> Optional[str]:
     env_key = f"STRIPE_PRICE_{plan_type}_{billing_period}".upper()
@@ -656,6 +670,9 @@ async def checkout_redirect(
     """Create a Stripe Checkout Session and redirect the browser to it.
     Preserve authentication state during payment flow.
     """
+    # Clean up any expired preservation data
+    await cleanup_expired_preservation()
+    
     if not STRIPE_AVAILABLE:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stripe not available")
 
